@@ -10,3 +10,7 @@ pymysql
 xlsxwriter
 selenium
 pyodbc
+pymongo
+fastapi
+pydantic
+uvicorn
