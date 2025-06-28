@@ -1,6 +1,3 @@
-import io
-import json
-import os
 import random
 import time
 import pandas as pd
@@ -8,7 +5,6 @@ from datetime import datetime
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 import requests
-from sqlalchemy import create_engine
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -16,8 +12,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
-import urllib.parse
 import logging
+import sys
+
+page_ = int(float(sys.argv[1]))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,7 +60,7 @@ class Scrapper:
             logging.info(complete_url)
             try:
                 res = requests.get(complete_url)
-                if res.status_code != 200 or i > 1:
+                if res.status_code != 200 or i > page_:
                     logging.error("Stopping loop due to invalid response or max iteration reached.")
                     break
                 self.driver.get(complete_url)
@@ -313,34 +311,14 @@ class Scrapper:
 
     def load_data(self, dict__: dict):
         if dict__:
-            new_main_cat = {
-                "name": dict__["main_category"]
-            }
-            main_cat = self.insert_data(dict__, 'main_categories', 'name', 'main_category', new_main_cat)
-
-            new_cat = {
-                "name": dict__["category"],
-                "main_category_id": main_cat
-            }
-            cat = self.insert_data(dict__, 'categories', 'name', 'category', new_cat)
-            
-            new_sub_cat = {
-                "name": dict__["sub_category"],
-                "category_id": cat
-            }
-            sub_cat = self.insert_data(dict__, 'sub_categories', 'name', 'sub_category', new_sub_cat)
-
-            new_brand = {
-                "name": dict__['brand']
-            }
-            brand = self.insert_data(dict__, 'brands', 'name', 'brand', new_brand)
-
             new_product = {
                 "title": dict__["title"],
                 "url": dict__["url"],
                 "condition": dict__["condition"],
-                "brand_id": brand,
-                "subcategory_id": sub_cat,
+                "brand_id": dict__["brand"],
+                "main_category": dict__["main_category"],
+                "category": dict__["category"],
+                "sub_category": dict__["sub_category"],
                 "warranty": dict__["warranty"],
                 "payment_method": dict__["payment_method"],
                 "seller": dict__["seller"],
