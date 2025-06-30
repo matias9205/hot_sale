@@ -13,9 +13,6 @@ from selenium.common.exceptions import NoSuchElementException
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 import logging
-import sys
-
-page_ = int(float(sys.argv[1]))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,14 +20,11 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"  # Formato de fecha
 )
 
-BASE_URL = "https://www.mercadolibre.com.ar"
-
 client = MongoClient("mongodb://localhost:27017/")
 db = client['ETL_Mercado_Libre']
 
 class Scrapper:
-    def __init__(self, url_, client_, db_):
-        self.url = url_
+    def __init__(self, client_, db_):
         self.options = webdriver.ChromeOptions()
         self.driver = webdriver.Chrome(options=self.options)
         self.options.add_argument("--headless")
@@ -48,44 +42,7 @@ class Scrapper:
         self.session.mount("https://", adapter)
         self.client: MongoClient = client_
         self.db = client[db_]
-        self.products_links = []
         self.errors_extracting = []
-    
-    def get_links(self) -> list:
-        i=1
-        product_link = {}
-        while True:
-            url_path = f"/ofertas?page={i}"
-            complete_url = self.url+url_path
-            logging.info(complete_url)
-            try:
-                res = requests.get(complete_url)
-                if res.status_code != 200 or i > page_:
-                    logging.error("Stopping loop due to invalid response or max iteration reached.")
-                    break
-                self.driver.get(complete_url)
-                time.sleep(random.uniform(2, 5))
-                try:
-                    h3_titles = self.driver.find_elements(By.XPATH, '//h3//a')
-                    brands = self.driver.find_elements(By.XPATH, '//span[contains(@class, "brand")]')
-                    sellers = self.driver.find_elements(By.XPATH, '//span[contains(@class, "seller")]')
-                    logging.info(f"--------------------LINKS COUNT: {len(h3_titles)}----------------------------")
-                    for idx, link in enumerate(h3_titles):
-                        brand_text = brands[idx].text if idx < len(brands) else ""
-                        seller_text = sellers[idx].text if idx < len(sellers) else ""
-                        self.products_links.append({
-                            "name": link.text,
-                            "link": link.get_attribute('href'),
-                            "brand": brand_text,
-                            "seller": seller_text
-                        })
-                except:
-                    logging.error("No hay <a> dentro del <h3>") 
-            except Exception as e:
-                logging.error(f"There was an error: {str(e)}, fetching data from the link: {complete_url}")
-            i += 1
-        logging.info(self.products_links)
-        return self.products_links
     
     def safe_find_text(self, by, path, multiple=False, index=0, default=""):
         try:
@@ -276,7 +233,7 @@ class Scrapper:
     def insert_data(self, dict_: dict, collection_: str, find_field: str, field_: str, payload_: dict):
         collection = self.db[collection_]
         filtro = {find_field: dict_[field_]}
-        if collection_ == "products_history":
+        if collection_ == "products_history_2":
             try:
                 last_entry = collection.find_one(
                     filtro,
@@ -291,7 +248,7 @@ class Scrapper:
                 logging.info("Nuevo historial insertado.")
                 return inserted_id
             except Exception as e:
-                logging.error(f"Error manejando 'products_history': {str(e)}")
+                logging.error(f"Error manejando 'products_history_2': {str(e)}")
                 return None
         else:
             try:
@@ -310,54 +267,58 @@ class Scrapper:
                 return None
 
     def load_data(self, dict__: dict):
-        if dict__:
-            new_product = {
-                "title": dict__["title"],
-                "url": dict__["url"],
-                "condition": dict__["condition"],
-                "brand_id": dict__["brand"],
-                "main_category": dict__["main_category"],
-                "category": dict__["category"],
-                "sub_category": dict__["sub_category"],
-                "warranty": dict__["warranty"],
-                "payment_method": dict__["payment_method"],
-                "seller": dict__["seller"],
-                "delivery_time": dict__["delivery_time"],
-                "delivery_cost": dict__["delivery_cost"],
-                "specs": dict__['specs']
-            }
-            product = self.insert_data(dict__, 'products', 'url', 'url', new_product)
+        try:
+            if dict__:
+                new_product = {
+                    "title": dict__["title"],
+                    "url": dict__["url"],
+                    "condition": dict__["condition"],
+                    "brand_id": dict__["brand"],
+                    "main_category": dict__["main_category"],
+                    "category": dict__["category"],
+                    "sub_category": dict__["sub_category"],
+                    "warranty": dict__["warranty"],
+                    "payment_method": dict__["payment_method"],
+                    "seller": dict__["seller"],
+                    "delivery_time": dict__["delivery_time"],
+                    "delivery_cost": dict__["delivery_cost"],
+                    "specs": dict__['specs']
+                }
+                product = self.insert_data(dict__, 'products_2', 'url', 'url', new_product)
 
-            new_price_doc = {
-                "product_id": product,
-                "extracted_at": datetime.now(),
-                "original_price": dict__["original_price"],
-                "price_with_discount": dict__["price_with_discount"],
-                "discount_aplicated": dict__["discount_aplicated"],
-                "stock": dict__["stock"],
-                "total_solds": dict__["total_solds"],
-                "recommendation": dict__["recommendation"],
-                "rating": dict__["rating"],
-                "total_califications": dict__["total_califications"],
-                "quality_price_relation": dict__["quality_price_relation"]
-            }
-            price_doc = self.insert_data(
-                {"product_id": product},
-                "products_history",
-                "product_id",
-                "product_id",
-                new_price_doc
-            )
-        else:
-            logging.error(f"{dict__} is empty")
+                new_price_doc = {
+                    "product_id": product,
+                    "extracted_at": datetime.now(),
+                    "original_price": dict__["original_price"],
+                    "price_with_discount": dict__["price_with_discount"],
+                    "discount_aplicated": dict__["discount_aplicated"],
+                    "stock": dict__["stock"],
+                    "total_solds": dict__["total_solds"],
+                    "recommendation": dict__["recommendation"],
+                    "rating": dict__["rating"],
+                    "total_califications": dict__["total_califications"],
+                    "quality_price_relation": dict__["quality_price_relation"]
+                }
+                price_doc = self.insert_data(
+                    {"product_id": product},
+                    "products_history_2",
+                    "product_id",
+                    "product_id",
+                    new_price_doc
+                )
+            else:
+                logging.error(f"{dict__} is empty")
+        except Exception as e:
+            print(e)
     
 if __name__ == '__main__':
-    scrapper = Scrapper(BASE_URL, client, 'ETL_Mercado_Libre')
-    products_links = scrapper.get_links()
-    for item in products_links:
-        product_name = item['name']
-        product_brand = item['brand']
-        product_url = item['link']
-        product_seller = item['seller']
+    scrapper = Scrapper(client, 'ETL_Mercado_Libre')
+    df_input_products = pd.read_csv('./input/products_to_scrap.csv')
+    df_input_products_10 = df_input_products.sample(10).drop_duplicates(subset=["url", "name"])
+    for index, row in df_input_products_10.iterrows():
+        product_name = row['name']
+        product_brand = row['brand']
+        product_url = row['url']
+        product_seller = row['seller']
         product_data = scrapper.fetch_data_from_link(product_url, product_name, product_brand, product_seller)
         scrapper.load_data(product_data)

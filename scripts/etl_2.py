@@ -23,7 +23,7 @@ class Etl:
         pipepline = [
             {
                 "$lookup": {
-                    "from": "products_history",
+                    "from": "products_history_2",
                     "let": { "productId": "$_id" },
                     "pipeline": [
                         {
@@ -42,7 +42,7 @@ class Etl:
                             }
                         },
                         { "$sort": { "extracted_at": -1 } },
-                        { "$limit": 1 }
+                        # { "$limit": 1 }
                     ],
                     "as": "price_history"
                 }
@@ -55,7 +55,7 @@ class Etl:
             { "$skip": skip },
             { "$limit": limit }
         ]
-        results = list(self.db.products.aggregate(pipepline))
+        results = list(self.db.products_2.aggregate(pipepline))
         results_formatted = [
             json.dumps(product, default=str, ensure_ascii=False, indent=2)
             for product in results
@@ -72,8 +72,29 @@ class Etl:
                 rows.append(combined)
         df_products = pd.DataFrame(rows)
         print(df_products.columns)
-        print(df_products.head())
+        return df_products
+    
+    def transform_data(self, df_: pd.DataFrame):
+        for col in df_:
+            if 'url' in col:
+                df_.drop(col, axis=1, inplace=True)
+            if '_id' in col:
+                df_.drop(col, axis=1, inplace=True)
+            if 'specs' in col:
+                df_.drop(col, axis=1, inplace=True)
+        print(f"Columns after dropping url, specs and _id: {df_.columns}")
+        print(f"Columns type: \n{df_.dtypes}")
+        df_["original_price"] = pd.to_numeric(df_["original_price"].str.replace(",", "", regex=False).str.replace(".", "", regex=False), errors="coerce")
+        df_["price_with_discount"] = pd.to_numeric(df_["price_with_discount"].str.replace(",", "", regex=False).str.replace(".", "", regex=False), errors="coerce")
+        df_["discount_aplicated"] = pd.to_numeric(df_["discount_aplicated"].str.replace("% OFF", "", regex=False), errors="coerce")
+        df_["extracted_at"] = pd.to_datetime(df_["extracted_at"])
+        df_["rating"] = pd.to_numeric(df_["rating"], errors="coerce")
+        df_["total_califications"] = pd.to_numeric(df_["total_califications"].str.replace(" calificaciones", "", regex=False), errors="coerce")
+        print(f"Final columns type: \n{df_.dtypes}")
+        return df_
 
 if __name__ == '__main__':
     etl = Etl(client, 'ETL_Mercado_Libre')
-    etl.extract_data(1, 5)
+    all_products = etl.extract_data(1, 50)
+    all_products_transformed = etl.transform_data(all_products)
+    all_products_transformed.to_csv("./all_products_transformed.csv", encoding="utf-8-sig", sep=";", index=False)
